@@ -20,6 +20,15 @@ export const getTRPCServerLive: (
     photo: {
       list: { query: tprc.photo.list },
     },
+    book: {
+      list: { query: tprc.book.list },
+      findOne: { query: tprc.book.findOne },
+      manage: {
+        create: { mutate: tprc.book.manage.create },
+        update: { mutate: tprc.book.manage.update },
+        delete: { mutate: tprc.book.manage.delete },
+      },
+    },
     tag: {
       list: { query: tprc.tag.list },
       get: { query: tprc.tag.get },

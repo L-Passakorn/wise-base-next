@@ -20,30 +20,35 @@ import { Time } from 'effects/time'
 import { getTimeLive } from 'effects/time.live'
 import { getTRPCServerLive } from 'effects/trpcClient.server.live'
 import { getAPIClientLive } from 'effects/apiClient.live'
+import { Book, bookQueryScheme } from 'modules/book'
 
-export type PhotosPageProps = {
+export type BooksPageProps = {
   user: User | null
-  photos: ListPhoto[] | null
+  bookId: string
+  book: Book | null
   baseURL: string
 }
 
-export async function getPhotosPageProps(
+export async function getBooksPageProps(
   env: Env,
   trpcClient: TRPCClient,
+  query: NodeJS.Dict<string | string[]>,
   user: User | null,
-): Promise<Result<PhotosPageProps, Error>> {
+): Promise<Result<BooksPageProps, Error>> {
   const baseURL = env.WEB_BASE_URL
-  const photos = (await trpcClient.photo.list.query()).val
+  const { bookId } = bookQueryScheme.parse(query)
+  const book = (await trpcClient.book.findOne.query({ bookId: bookId })).val
   return ok({
     user: user ? { id: user.id, name: user.name, email: user.email } : null,
-    photos,
+    book,
+    bookId,
     baseURL,
   })
 }
 
 export async function getServerSideProps(
   context: GetServerSidePropsContext,
-): Promise<GetServerSidePropsResult<PhotosPageProps>> {
+): Promise<GetServerSidePropsResult<BooksPageProps>> {
   const env = getEnvLive()
   // const trpcClient = getTRPCClientLive(env.WEB_BASE_URL)
   const apiClient = getAPIClientLive(env.SERVICE_BASE_URL)
@@ -53,9 +58,10 @@ export async function getServerSideProps(
     env,
     session,
   })
-  const result = await getPhotosPageProps(
+  const result = await getBooksPageProps(
     env,
     trpcClient,
+    context.query,
     session?.user ?? null,
   )
   return result.val
@@ -65,28 +71,30 @@ export async function getServerSideProps(
     : { notFound: true }
 }
 
-export type PhotosProps = {
+export type BooksProps = {
   user: User | null
-  photos: ListPhoto[] | null
+  book: Book | null
+  bookId: string
   trpcClient: TRPCClient
   time: Time
 }
 
-export function Photos({
+export function Books({
   user,
-  photos,
+  book,
   trpcClient,
+  bookId,
   time,
-}: PhotosProps): React.ReactElement | null {
-  const listPhotosQuery = useQuery({
-    queryKey: ['listPhotos'],
-    queryFn: () => trpcClient.photo.list.query(),
-    initialData: photos ? ok(photos) : undefined,
+}: BooksProps): React.ReactElement | null {
+  const findOneBookQuery = useQuery({
+    queryKey: ['findOneBook', bookId],
+    queryFn: () => trpcClient.book.findOne.query({ bookId: bookId }),
+    initialData: book ? ok(book) : undefined,
   })
 
   return (
     <div className="space-y-4">
-      <h1>Photos</h1>
+      <h1>Books</h1>
       {user ? (
         <div className="space-y-6">
           <div className="flex items-center space-x-4">
@@ -109,35 +117,30 @@ export function Photos({
         </div>
       )}
       <div className="space-y-4">
-        <h2 className="font-medium">Photos</h2>
-        <div>{listPhotosQuery.isLoading && <span>Loading</span>}</div>
+        <h2 className="font-medium">Books</h2>
+        <div>{findOneBookQuery.isLoading && <span>Loading</span>}</div>
         <div className="flex flex-col">
-          {listPhotosQuery.data?.val &&
-            listPhotosQuery.data.val.map((photo) => (
-              <div key={photo.id}>
-                <Photo photo={photo} />
-              </div>
-            ))}
+          {findOneBookQuery.data?.val && (
+            <div>
+              <Book book={findOneBookQuery.data.val} />
+            </div>
+          )}
         </div>
       </div>
     </div>
   )
 }
 
-type PhotoProps = { photo: ListPhoto }
+type BookProps = { book: Book }
 
-function Photo(props: PhotoProps): JSX.Element {
-  const { photo } = props
+function Book(props: BookProps): JSX.Element {
+  const { book } = props
   return (
     <div className="my-4 mx-auto w-96 space-y-3 rounded bg-white p-6">
       <div className="flex flex-row items-center justify-between">
         <div className="flex flex-row items-center space-x-2">
-          <img
-            className="h-10 w-10 rounded-full object-cover "
-            src={photo.thumbnailUrl}
-          />
           <span className="space-x-2 text-sm text-gray-500">
-            <span className="font-bold text-gray-900">{photo.title}</span>
+            <span className="font-bold text-gray-900">{book.author?.name}</span>
             <span>&middot;</span>
             <span>2 d</span>
           </span>
@@ -158,7 +161,23 @@ function Photo(props: PhotoProps): JSX.Element {
           />
         </svg>
       </div>
-      <img className="aspect-square w-full object-cover" src={photo.url} />
+      <div className="flex aspect-square h-full w-full flex-col rounded-md border-2 bg-gray-100">
+        <div className="m-auto w-full justify-center text-center">
+          <div className="text-2xl font-extrabold ">{book.title}</div>
+          <div className="mt-3 flex flex-row justify-center gap-2">
+            {book.category &&
+              book.category.map((e) => (
+                <div
+                  className="h-6 rounded-full bg-gray-200 px-4 font-light"
+                  key={e}
+                >
+                  {e}
+                </div>
+              ))}
+          </div>
+        </div>
+      </div>
+      {/* <img className="aspect-square w-full object-cover" src={photo.url} /> */}
       <div className="space-y-1">
         <div className="flex flex-row items-center justify-between">
           <div className="flex flex-row items-center space-x-2">
@@ -167,10 +186,28 @@ function Photo(props: PhotoProps): JSX.Element {
             <LikeButton />
           </div>
 
-          <LikeButton />
+          <button>
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              fill="none"
+              viewBox="0 0 24 24"
+              strokeWidth={1.5}
+              stroke="currentColor"
+              className="h-6 w-6"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0"
+              />
+            </svg>
+          </button>
         </div>
         <div>
           <span className="text-xs font-bold">10,459 likes</span>
+        </div>
+        <div className="text-gray-500">
+          <p className="text-xs font-normal">{book.detail}</p>
         </div>
       </div>
     </div>
@@ -198,16 +235,23 @@ function LikeButton(): React.ReactElement {
   )
 }
 
-const PhotosPage: NextPage<PhotosPageProps> = ({
+const BooksPage: NextPage<BooksPageProps> = ({
   user,
   baseURL,
-  photos,
+  bookId,
+  book,
 }): React.ReactElement | null => {
   const trpcClient = getTRPCClientLive(baseURL)
   const time = getTimeLive()
   return (
-    <Photos user={user} photos={photos} trpcClient={trpcClient} time={time} />
+    <Books
+      user={user}
+      book={book}
+      bookId={bookId}
+      trpcClient={trpcClient}
+      time={time}
+    />
   )
 }
 
-export default PhotosPage
+export default BooksPage

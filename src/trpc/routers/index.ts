@@ -3,6 +3,7 @@ import { publicProcedure, router } from 'trpc/index'
 import { z } from 'zod'
 import { photoRouter } from './photos'
 import { tagRouter } from './tags'
+import { bookRouter } from './books'
 
 export const appRouter = router({
   ping: publicProcedure.query((): string => {
@@ -19,6 +20,7 @@ export const appRouter = router({
     }),
   tag: tagRouter,
   photo: photoRouter,
+  book: bookRouter,
 })
 
 export type AppRouter = typeof appRouter
